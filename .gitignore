@@ -1,3 +1,5 @@
 /target
 /music
 /video
+*.sqlite
+*.env
