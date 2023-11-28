@@ -3,3 +3,5 @@
 /video
 *.sqlite
 *.env
+/sqlite
+/onnx-modifier
