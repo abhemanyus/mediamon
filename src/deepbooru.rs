@@ -1,7 +1,7 @@
 use std::{fs::read_to_string, path::Path};
 
 use image::{imageops::FilterType, DynamicImage, ImageBuffer, Rgb};
-use ndarray::{s, Array4, CowArray};
+use ndarray::{Array4, CowArray};
 use ort::{
     tensor::OrtOwnedTensor, Environment, ExecutionProvider, GraphOptimizationLevel, Session,
     SessionBuilder, Value,
@@ -9,7 +9,6 @@ use ort::{
 
 pub struct Jarvis {
     session: Session,
-    tags: Vec<String>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -25,7 +24,7 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl Jarvis {
-    pub fn new(model_path: impl AsRef<Path>, tags_path: impl AsRef<Path>) -> Result<Self> {
+    pub fn new(model_path: impl AsRef<Path>) -> Result<Self> {
         let environment = Environment::builder()
             .with_name("deepbooru")
             .with_execution_providers([ExecutionProvider::CPU(Default::default())])
@@ -35,15 +34,11 @@ impl Jarvis {
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(std::thread::available_parallelism()?.get() as i16)?
             .with_model_from_file(&model_path)?;
-        let tags = read_to_string(tags_path)?
-            .split('\n')
-            .map(|s| s.to_string())
-            .collect();
 
-        Ok(Self { tags, session })
+        Ok(Self { session })
     }
 
-    pub fn infer_tags(&self, image: &DynamicImage, cutoff: Cutoff) -> Result<Vec<String>> {
+    pub fn infer_tags(&self, image: &DynamicImage) -> Result<Vec<(f32, usize)>> {
         let resized = resize_padded(image, 512, 512);
         let resized_vec = resized.to_vec();
         let image = Array4::from_shape_vec((1, 512, 512, 3), resized_vec).or(Err(Error::ANY(
@@ -56,25 +51,29 @@ impl Jarvis {
         let outputs: Vec<Value> = self.session.run(inputs)?;
         let generated_tags: OrtOwnedTensor<f32, _> = outputs[0].try_extract()?;
         let generated_tags = generated_tags.view();
-        let best = &mut generated_tags
-            .slice(s![0, ..])
+        let generated_tags: Vec<(f32, usize)> = generated_tags
             .iter()
-            .cloned()
-            .zip(0..)
-            .collect::<Vec<(f32, usize)>>();
-        best.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
-        Ok(best
-            .iter()
-            .filter(|(p, _)| *p >= cutoff.prob)
-            .take(cutoff.count)
-            .map(|(_, l)| self.tags[*l].clone())
-            .collect())
+            .zip(1usize..)
+            .map(|(f, s)| (*f, s))
+            .collect();
+        const CHARACTER_START: usize = 6892;
+        const RATING_START: usize = 9174;
+        let (mut attributes, mut characters, mut rating) = (
+            generated_tags[..CHARACTER_START].to_owned(),
+            generated_tags[CHARACTER_START..RATING_START].to_owned(),
+            generated_tags[RATING_START..].to_owned(),
+        );
+        attributes.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
+        characters.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
+        rating.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
+        let (attributes, characters, rating) = (
+            attributes.into_iter().take(40),
+            characters.into_iter().take(5),
+            rating.into_iter().take(1),
+        );
+        let tags = attributes.chain(characters).chain(rating).collect();
+        Ok(tags)
     }
-}
-
-pub struct Cutoff {
-    pub prob: f32,
-    pub count: usize,
 }
 
 fn resize_padded(
