@@ -6,11 +6,23 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+axum = { version = "0.7.1", features = ["json", "tracing", "multipart"] }
 dotenv = "0.15.0"
+futures = "0.3.29"
+futures-core = "0.3.29"
 image = "0.24.7"
 image_hasher = "1.2.0"
+log = "0.4.20"
 ndarray = "0.15.6"
 ort = "1.16.2"
 sqlx = { version = "0.7.2", features = ["runtime-tokio", "tls-rustls", "sqlite", "migrate"] }
 thiserror = "1.0.49"
 tokio = { version = "1.33.0", features = ["full"] }
+tokio-util = { version = "0.7.10", features = ["io"] }
+tower-http = { version = "0.5.0", features = ["cors", "trace", "compression-gzip", "compression-deflate"] }
+tracing = "0.1.40"
+tracing-log = "0.2.0"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+ulid = "1.1.0"
+utoipa = { version = "4.1.0", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "5.0.0", features = ["axum"] }
