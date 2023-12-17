@@ -89,8 +89,8 @@ async fn upload() -> Response {
     }
 }
 
-struct MultipartFile<'a> {
-    data: StreamReader<Field<'a>, Bytes>,
+struct MultipartFile {
+    data: Bytes,
     file_name: Option<String>,
     file_type: Option<String>,
 }
@@ -104,13 +104,10 @@ async fn extract_file(field_name: &str, mut multipart: Multipart) -> Result<Mult
             _ => return Err(()),
         }
     };
-    let file_name = field.file_name();
-    let file_type = field.content_type();
-    let body_with_io_error =
-        field.map_err(|err| tokio::io::Error::new(tokio::io::ErrorKind::Other, err));
-    let body_reader = StreamReader::new(body_with_io_error);
+    let file_name = field.file_name().map(|str| str.to_owned());
+    let file_type = field.content_type().map(|str| str.to_owned());
     Ok(MultipartFile {
-        data: body_reader,
+        data: field.bytes().await.unwrap(),
         file_name,
         file_type,
     })
