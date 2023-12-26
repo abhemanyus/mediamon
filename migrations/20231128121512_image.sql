@@ -9,5 +9,4 @@ CREATE TABLE image (
     CONSTRAINT unique_path UNIQUE (path)
 );
 
-CREATE INDEX idx_image_added ON image (date_added DESC);
 CREATE INDEX idx_image_updated ON image (date_updated DESC);

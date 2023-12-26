@@ -1,29 +1,29 @@
+use axum::extract::DefaultBodyLimit;
+use axum::Json;
+use serde::Deserialize;
 use std::time::UNIX_EPOCH;
+use utoipa::openapi::security::ApiKey;
+use utoipa::openapi::security::ApiKeyValue;
+use utoipa::openapi::security::SecurityScheme;
+use utoipa::Modify;
+use utoipa::OpenApi;
+use utoipa::ToSchema;
 
 use axum::{
-    extract::{
-        multipart::{Field, MultipartError},
-        MatchedPath, Multipart,
-    },
+    extract::{MatchedPath, Multipart},
     http::{Request, StatusCode},
     response::{IntoResponse, Response},
     routing, Router,
 };
 use futures::TryStreamExt;
-use futures_core::Stream;
 use log::info;
-use tokio::io::AsyncRead;
-use tokio_util::{bytes::Bytes, io::StreamReader};
+use tokio_util::io::StreamReader;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 use tracing::info_span;
-use tracing_subscriber::prelude::*;
-use utoipa::{
-    openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
-    Modify, OpenApi,
-};
 use utoipa_swagger_ui::SwaggerUi;
 
 pub fn router() -> Router {
+    use tracing_subscriber::prelude::*;
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().without_time())
         .with(tracing_subscriber::EnvFilter::from_default_env())
@@ -49,7 +49,11 @@ pub fn router() -> Router {
         .allow_origin(tower_http::cors::Any);
     let app = Router::new()
         .route("/", routing::get(root))
-        .route("/upload", routing::post(upload))
+        .route(
+            "/upload/image/file",
+            routing::post(upload_image_file).layer(DefaultBodyLimit::disable()),
+        )
+        .route("/upload/image/url", routing::post(upload_image_url))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(cors_layer)
         .layer(trace_layer)
@@ -68,29 +72,47 @@ async fn test_router() {
 
 #[utoipa::path(
     post,
-    path = "/upload",
+    path = "/upload/image/url",
+    request_body(content = UploadUrlBody),
+    responses(
+        (status = 201, description = "Downloaded file successfully", body = String),
+        (status = 400, description = "Failed to download file", body = String),
+    )
+)]
+
+async fn upload_image_url(Json(body): Json<UploadUrlBody>) -> Response {
+    body.url.into_response()
+}
+
+#[derive(ToSchema, Deserialize)]
+struct UploadUrlBody {
+    url: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/upload/image/file",
+    request_body(content = UploadFileBody, content_type="multipart/form-data"),
     responses(
         (status = 201, description = "Uploaded file successfully", body = String),
         (status = 400, description = "Failed to upload file", body = String),
     )
 )]
 
-async fn upload() -> Response {
-    info!("Rooting...");
-    match std::time::SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis()
-        % 2
-        == 0
-    {
-        true => "Hello world!".into_response(),
-        false => (StatusCode::CREATED, "test").into_response(),
-    }
+async fn upload_image_file(multipart: Multipart) -> Response {
+    info!("Uploading...");
+    let file = extract_file("image", multipart).await.unwrap();
+    file.file_path.into_response()
+}
+
+#[derive(ToSchema)]
+struct UploadFileBody {
+    #[schema(value_type = String, format = Binary)]
+    image: Vec<u8>,
 }
 
 struct MultipartFile {
-    data: Bytes,
+    file_path: String,
     file_name: Option<String>,
     file_type: Option<String>,
 }
@@ -106,8 +128,23 @@ async fn extract_file(field_name: &str, mut multipart: Multipart) -> Result<Mult
     };
     let file_name = field.file_name().map(|str| str.to_owned());
     let file_type = field.content_type().map(|str| str.to_owned());
+
+    let body_with_io_error =
+        field.map_err(|err| tokio::io::Error::new(tokio::io::ErrorKind::Other, err));
+    let mut body_reader = StreamReader::new(body_with_io_error);
+    let file_path = format!("/tmp/{}", uuid::Uuid::new_v4().to_string());
+    let mut file_store = tokio::fs::File::options()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(&file_path)
+        .await
+        .unwrap();
+    tokio::io::copy(&mut body_reader, &mut file_store)
+        .await
+        .unwrap();
     Ok(MultipartFile {
-        data: field.bytes().await.unwrap(),
+        file_path,
         file_name,
         file_type,
     })
@@ -139,8 +176,10 @@ async fn root() -> Response {
 #[openapi(
     paths(
         root,
-        upload,
+        upload_image_file,
+        upload_image_url,
     ),
+    components(schemas(UploadFileBody, UploadUrlBody)),
     modifiers(&SecurityAddon),
     tags(
         (name = "todo", description = "Todo items management API")

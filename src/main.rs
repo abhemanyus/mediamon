@@ -1,4 +1,10 @@
+use mediamon::api::router;
+
 #[tokio::main]
 async fn main() {
-    mediamon::ytdlp::download_music("https://www.youtube.com/watch?v=Ia0vVQnNGcc", "./music").await.unwrap();
+    let router = router();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+        .await
+        .unwrap();
+    axum::serve(listener, router).await.unwrap();
 }

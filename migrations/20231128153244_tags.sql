@@ -7,7 +7,7 @@ CREATE TABLE tag (
 CREATE TABLE image_tag (
     image_id INTEGER,
     tag_id INTEGER,
-    score INTEGER NOT NULL,
+    score REAL NOT NULL,
     PRIMARY KEY (image_id, tag_id),
     FOREIGN KEY (image_id) REFERENCES image(image_id) ON DELETE CASCADE,
     FOREIGN KEY (tag_id) REFERENCES tag(tag_id) ON DELETE CASCADE

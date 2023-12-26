@@ -9,5 +9,4 @@ CREATE TABLE video (
     CONSTRAINT unique_path UNIQUE (path)
 );
 
-CREATE INDEX idx_video_added ON video (date_added DESC);
 CREATE INDEX idx_video_updated ON video (date_updated DESC);
