@@ -1,6 +1,8 @@
 use axum::extract::DefaultBodyLimit;
+use axum::extract::State;
 use axum::Json;
 use serde::Deserialize;
+use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 use utoipa::openapi::security::ApiKey;
 use utoipa::openapi::security::ApiKeyValue;
@@ -22,7 +24,10 @@ use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLay
 use tracing::info_span;
 use utoipa_swagger_ui::SwaggerUi;
 
-pub fn router() -> Router {
+use crate::database::Database;
+use crate::deepbooru::Jarvis;
+
+pub fn router(jarvis: Jarvis, db: Database) -> Router {
     use tracing_subscriber::prelude::*;
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().without_time())
@@ -47,6 +52,7 @@ pub fn router() -> Router {
         .allow_headers(tower_http::cors::Any)
         .allow_methods(tower_http::cors::Any)
         .allow_origin(tower_http::cors::Any);
+    let app_state = AppState { jarvis, db };
     let app = Router::new()
         .route("/", routing::get(root))
         .route(
@@ -54,20 +60,22 @@ pub fn router() -> Router {
             routing::post(upload_image_file).layer(DefaultBodyLimit::disable()),
         )
         .route("/upload/image/url", routing::post(upload_image_url))
+        .route(
+            "/upload/video/file",
+            routing::post(upload_video_file).layer(DefaultBodyLimit::disable()),
+        )
+        .route("/upload/video/url", routing::post(upload_video_url))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(cors_layer)
         .layer(trace_layer)
-        .layer(CompressionLayer::new().gzip(true).deflate(true));
+        .layer(CompressionLayer::new().gzip(true).deflate(true))
+        .with_state(Arc::new(app_state));
     app
 }
 
-#[tokio::test]
-async fn test_router() {
-    let router = router();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-        .await
-        .unwrap();
-    axum::serve(listener, router).await.unwrap();
+struct AppState {
+    jarvis: Jarvis,
+    db: Database,
 }
 
 #[utoipa::path(
@@ -81,6 +89,20 @@ async fn test_router() {
 )]
 
 async fn upload_image_url(Json(body): Json<UploadUrlBody>) -> Response {
+    body.url.into_response()
+}
+
+#[utoipa::path(
+    post,
+    path = "/upload/video/url",
+    request_body(content = UploadUrlBody),
+    responses(
+        (status = 201, description = "Downloaded file successfully", body = String),
+        (status = 400, description = "Failed to download file", body = String),
+    )
+)]
+
+async fn upload_video_url(Json(body): Json<UploadUrlBody>) -> Response {
     body.url.into_response()
 }
 
@@ -99,16 +121,51 @@ struct UploadUrlBody {
     )
 )]
 
-async fn upload_image_file(multipart: Multipart) -> Response {
+async fn upload_image_file(State(state): State<Arc<AppState>>, multipart: Multipart) -> Response {
     info!("Uploading...");
-    let file = extract_file("image", multipart).await.unwrap();
+    let file = extract_file("file", multipart).await.unwrap();
+    let file_data = tokio::fs::read(&file.file_path).await.unwrap();
+    let image_data = image::load_from_memory(&file_data).unwrap();
+    let image_tags = state.jarvis.infer_tags(&image_data).unwrap();
+    let tag_names: Vec<(String, (f32, usize))> = state
+        .db
+        .get_tag_names(
+            &image_tags
+                .iter()
+                .map(|(_, tag_id)| *tag_id as i32)
+                .collect::<Vec<i32>>(),
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|(_, tag_name)| tag_name)
+        .zip(image_tags)
+        .collect();
+    serde_json::to_string_pretty(&tag_names)
+        .unwrap()
+        .into_response()
+}
+
+#[utoipa::path(
+    post,
+    path = "/upload/video/file",
+    request_body(content = UploadFileBody, content_type="multipart/form-data"),
+    responses(
+        (status = 201, description = "Uploaded file successfully", body = String),
+        (status = 400, description = "Failed to upload file", body = String),
+    )
+)]
+
+async fn upload_video_file(multipart: Multipart) -> Response {
+    info!("Uploading...");
+    let file = extract_file("file", multipart).await.unwrap();
     file.file_path.into_response()
 }
 
 #[derive(ToSchema)]
 struct UploadFileBody {
     #[schema(value_type = String, format = Binary)]
-    image: Vec<u8>,
+    file: Vec<u8>,
 }
 
 struct MultipartFile {
@@ -178,12 +235,11 @@ async fn root() -> Response {
         root,
         upload_image_file,
         upload_image_url,
+        upload_video_file,
+        upload_video_url,
     ),
     components(schemas(UploadFileBody, UploadUrlBody)),
     modifiers(&SecurityAddon),
-    tags(
-        (name = "todo", description = "Todo items management API")
-    )
 )]
 struct ApiDoc;
 
@@ -194,7 +250,7 @@ impl Modify for SecurityAddon {
         if let Some(components) = openapi.components.as_mut() {
             components.add_security_scheme(
                 "api_key",
-                SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("todo_apikey"))),
+                SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("mediamon_api_key"))),
             )
         }
     }

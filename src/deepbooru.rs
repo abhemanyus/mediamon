@@ -51,27 +51,26 @@ impl Jarvis {
         let outputs: Vec<Value> = self.session.run(inputs)?;
         let generated_tags: OrtOwnedTensor<f32, _> = outputs[0].try_extract()?;
         let generated_tags = generated_tags.view();
-        let generated_tags: Vec<(f32, usize)> = generated_tags
+        let mut generated_tags: Vec<(f32, usize)> = generated_tags
             .iter()
             .zip(1usize..)
             .map(|(f, s)| (*f, s))
             .collect();
-        const CHARACTER_START: usize = 6892;
-        const RATING_START: usize = 9174;
-        let (mut attributes, mut characters, mut rating) = (
-            generated_tags[..CHARACTER_START].to_owned(),
-            generated_tags[CHARACTER_START..RATING_START].to_owned(),
-            generated_tags[RATING_START..].to_owned(),
-        );
+        const CHARACTER_START: usize = 6892 - 1;
+        const RATING_START: usize = 9174 - 1;
+        let mut rating = generated_tags.split_off(RATING_START);
+        let mut characters = generated_tags.split_off(CHARACTER_START);
+        let mut attributes = generated_tags;
         attributes.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
         characters.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
         rating.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
-        let (attributes, characters, rating) = (
-            attributes.into_iter().take(40),
-            characters.into_iter().take(5),
-            rating.into_iter().take(1),
-        );
-        let tags = attributes.chain(characters).chain(rating).collect();
+        attributes.truncate(40);
+        characters.truncate(5);
+        rating.truncate(1);
+        let mut tags = attributes;
+        tags.append(&mut characters);
+        tags.append(&mut rating);
+        tags.sort_unstable_by_key(|(_, tag_id)| *tag_id);
         Ok(tags)
     }
 }

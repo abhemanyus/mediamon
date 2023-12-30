@@ -1,5 +1,6 @@
 use sqlx::{migrate, sqlite::SqlitePoolOptions, Execute, QueryBuilder, Sqlite, SqlitePool};
 
+#[derive(Clone)]
 pub struct Database {
     pool: SqlitePool,
 }
@@ -21,6 +22,22 @@ impl Database {
         let pool = SqlitePoolOptions::new().connect(&database_url).await?;
         migrate!().run(&pool).await?;
         Ok(Self { pool })
+    }
+
+    pub async fn get_tag_names(&self, tag_ids: &[i32]) -> Result<Vec<(i32, String)>> {
+        let mut query_builder =
+            QueryBuilder::<Sqlite>::new("SELECT tag_id, name FROM tag WHERE tag_id IN (");
+        let mut separated = query_builder.separated(",");
+        for tag_id in tag_ids {
+            separated.push_bind(tag_id);
+        }
+        separated.push_unseparated(")");
+        query_builder.push("ORDER BY tag_id");
+        let query = query_builder
+            .build_query_as::<(i32, String)>()
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(query)
     }
 }
 
