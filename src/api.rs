@@ -125,7 +125,21 @@ async fn upload_image_file(State(state): State<Arc<AppState>>, multipart: Multip
     info!("Uploading...");
     let file = extract_file("file", multipart).await.unwrap();
     let file_data = tokio::fs::read(&file.file_path).await.unwrap();
-    let image_data = image::load_from_memory(&file_data).unwrap();
+    let Some(image_format) = file
+        .file_type
+        .and_then(image::ImageFormat::from_mime_type)
+        .or_else(|| {
+            file.file_name
+                .and_then(|path| image::ImageFormat::from_path(path).ok())
+        })
+        .or_else(|| image::guess_format(&file_data).ok())
+    else {
+        tokio::fs::remove_file(file.file_path).await.ok();
+        return (StatusCode::BAD_REQUEST, "unknown image format").into_response();
+    };
+    let Ok(image_data) = image::load_from_memory_with_format(&file_data, image_format) else {
+        return (StatusCode::BAD_REQUEST, "corrupt image data").into_response();
+    };
     let image_tags = state.jarvis.infer_tags(&image_data).unwrap();
     let tag_names: Vec<(String, (f32, usize))> = state
         .db

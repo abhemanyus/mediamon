@@ -41,9 +41,8 @@ impl Jarvis {
     pub fn infer_tags(&self, image: &DynamicImage) -> Result<Vec<(f32, usize)>> {
         let resized = resize_padded(image, 512, 512);
         let resized_vec = resized.to_vec();
-        let image = Array4::from_shape_vec((1, 512, 512, 3), resized_vec).or(Err(Error::ANY(
-            "failed to resize array, impossible".to_string(),
-        )))?;
+        let image =
+            Array4::from_shape_vec((1, 512, 512, 3), resized_vec).expect("This should never fail");
         let mut image = image.mapv(|e| f32::from(e) / 255.0);
         image.swap_axes(2, 1);
         let image = CowArray::from(image).into_dyn();
