@@ -1,4 +1,4 @@
-const YT_DLP: &'static str = "./yt-dlp_linux";
+const YT_DLP: &'static str = "yt-dlp";
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -34,7 +34,9 @@ pub async fn download_music(url: &str, dir: &str) -> Result<String> {
     if output.status.success() {
         return Ok(String::from_utf8(output.stdout).unwrap_or("utf error".to_string()));
     } else {
-        return Err(Error::YTD(String::from_utf8(output.stderr).unwrap_or("utf error".to_string())));
+        return Err(Error::YTD(
+            String::from_utf8(output.stderr).unwrap_or("utf error".to_string()),
+        ));
     }
 }
 
@@ -60,11 +62,15 @@ pub async fn download_video(url: &str, dir: &str) -> Result<String> {
     if output.status.success() {
         return Ok(String::from_utf8(output.stdout).unwrap_or("utf error".to_string()));
     } else {
-        return Err(Error::YTD(String::from_utf8(output.stderr).unwrap_or("utf error".to_string())));
+        return Err(Error::YTD(
+            String::from_utf8(output.stderr).unwrap_or("utf error".to_string()),
+        ));
     }
 }
 
 #[tokio::test]
 async fn test_download_music() {
-    download_music("https://www.youtube.com/watch?v=VFbhKZFzbzk", "./music").await.unwrap();
+    download_music("https://www.youtube.com/watch?v=VFbhKZFzbzk", "./music")
+        .await
+        .unwrap();
 }

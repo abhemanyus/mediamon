@@ -6,5 +6,3 @@
 *.sqlite3-*
 *.env
 onnx-modifier
-yt-dlp
-gallery-dl
