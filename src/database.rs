@@ -1,4 +1,4 @@
-use sqlx::{migrate, sqlite::SqlitePoolOptions, Execute, QueryBuilder, Sqlite, SqlitePool};
+use sqlx::{migrate, sqlite::SqlitePoolOptions, QueryBuilder, Sqlite, SqlitePool};
 
 #[derive(Clone)]
 pub struct Database {

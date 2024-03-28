@@ -4,6 +4,12 @@ pub struct Fingerprint {
     hasher: Hasher,
 }
 
+impl Default for Fingerprint {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Fingerprint {
     pub fn new() -> Self {
         Self {

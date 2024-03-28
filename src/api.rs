@@ -53,7 +53,8 @@ pub fn router(jarvis: Jarvis, db: Database) -> Router {
         .allow_methods(tower_http::cors::Any)
         .allow_origin(tower_http::cors::Any);
     let app_state = AppState { jarvis, db };
-    let app = Router::new()
+    
+    Router::new()
         .route("/", routing::get(root))
         .route(
             "/upload/image/file",
@@ -69,8 +70,7 @@ pub fn router(jarvis: Jarvis, db: Database) -> Router {
         .layer(cors_layer)
         .layer(trace_layer)
         .layer(CompressionLayer::new().gzip(true).deflate(true))
-        .with_state(Arc::new(app_state));
-    app
+        .with_state(Arc::new(app_state))
 }
 
 struct AppState {
@@ -203,7 +203,7 @@ async fn extract_file(field_name: &str, mut multipart: Multipart) -> Result<Mult
     let body_with_io_error =
         field.map_err(|err| tokio::io::Error::new(tokio::io::ErrorKind::Other, err));
     let mut body_reader = StreamReader::new(body_with_io_error);
-    let file_path = format!("/tmp/{}", uuid::Uuid::new_v4().to_string());
+    let file_path = format!("/tmp/{}", uuid::Uuid::new_v4());
     let mut file_store = tokio::fs::File::options()
         .read(true)
         .write(true)

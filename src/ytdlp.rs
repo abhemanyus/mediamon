@@ -1,4 +1,4 @@
-const YT_DLP: &'static str = "yt-dlp";
+const YT_DLP: &str = "yt-dlp";
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -32,11 +32,11 @@ pub async fn download_music(url: &str, dir: &str) -> Result<String> {
         Err(err) => return Err(Error::IO(err)),
     };
     if output.status.success() {
-        return Ok(String::from_utf8(output.stdout).unwrap_or("utf error".to_string()));
+        Ok(String::from_utf8(output.stdout).unwrap_or("utf error".to_string()))
     } else {
-        return Err(Error::YTD(
+        Err(Error::YTD(
             String::from_utf8(output.stderr).unwrap_or("utf error".to_string()),
-        ));
+        ))
     }
 }
 
@@ -60,11 +60,11 @@ pub async fn download_video(url: &str, dir: &str) -> Result<String> {
         Err(err) => return Err(Error::IO(err)),
     };
     if output.status.success() {
-        return Ok(String::from_utf8(output.stdout).unwrap_or("utf error".to_string()));
+        Ok(String::from_utf8(output.stdout).unwrap_or("utf error".to_string()))
     } else {
-        return Err(Error::YTD(
+        Err(Error::YTD(
             String::from_utf8(output.stderr).unwrap_or("utf error".to_string()),
-        ));
+        ))
     }
 }
 

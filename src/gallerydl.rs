@@ -1,4 +1,4 @@
-const GALLERY_DL: &'static str = "gallery-dl";
+const GALLERY_DL: &str = "gallery-dl";
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -32,11 +32,11 @@ pub async fn download_art(url: &str, dir: &str) -> Result<String> {
         Err(err) => return Err(Error::IO(err)),
     };
     if output.status.success() {
-        return Ok(String::from_utf8(output.stdout).unwrap_or("utf error".to_string()));
+        Ok(String::from_utf8(output.stdout).unwrap_or("utf error".to_string()))
     } else {
-        return Err(Error::YTD(
+        Err(Error::YTD(
             String::from_utf8(output.stderr).unwrap_or("utf error".to_string()),
-        ));
+        ))
     }
 }
 
