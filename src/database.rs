@@ -20,7 +20,7 @@ impl Database {
     pub async fn new() -> Result<Self> {
         let database_url = dotenv::var("DATABASE_URL")?;
         let pool = SqlitePoolOptions::new().connect(&database_url).await?;
-        migrate!().run(&pool).await?;
+        // migrate!().run(&pool).await?;
         Ok(Self { pool })
     }
 
@@ -32,7 +32,6 @@ impl Database {
             separated.push_bind(tag_id);
         }
         separated.push_unseparated(")");
-        query_builder.push("ORDER BY tag_id");
         let query = query_builder
             .build_query_as::<(i32, String)>()
             .fetch_all(&self.pool)
@@ -43,6 +42,7 @@ impl Database {
 
 #[test]
 fn where_in() {
+    use sqlx::Execute;
     let mut query_builder: QueryBuilder<Sqlite> =
         QueryBuilder::new("SELECT * FROM population WHERE year IN (");
     let years = vec![2019, 2020, 2021];
@@ -50,7 +50,7 @@ fn where_in() {
     for year in years {
         separated.push_bind(year);
     }
-    separated.push_unseparated(") ");
+    separated.push_unseparated(")");
     let mut query = query_builder.build();
     let arguments = query.take_arguments().unwrap();
     dbg!(&arguments);

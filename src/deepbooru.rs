@@ -69,7 +69,6 @@ impl Jarvis {
         let mut tags = attributes;
         tags.append(&mut characters);
         tags.append(&mut rating);
-        tags.sort_unstable_by_key(|(_, tag_id)| *tag_id);
         Ok(tags)
     }
 }
