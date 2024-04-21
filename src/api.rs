@@ -1,6 +1,7 @@
 use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
 use axum::Json;
+use image::ImageBuffer;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
@@ -94,7 +95,10 @@ struct AppState {
         (status = 400, description = "Failed to download file", body = String),
     )
 )]
-async fn upload_image_url(Json(body): Json<UploadUrlBody>) -> Response {
+async fn upload_image_url(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<UploadUrlBody>,
+) -> Response {
     let image_path = match gallerydl::download_art(&body.url).await {
         Ok(image_path) => image_path,
         Err(gallerydl::Error::GLD(err)) => {
@@ -102,7 +106,26 @@ async fn upload_image_url(Json(body): Json<UploadUrlBody>) -> Response {
         }
         Err(gallerydl::Error::IO(_)) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
-    todo!();
+    let image_path_parsed = std::path::Path::new(&image_path);
+    let file = MultipartFile {
+        file_path: image_path.clone(),
+        file_name: image_path_parsed
+            .file_name()
+            .and_then(|v| v.to_str())
+            .map(|v| v.to_string()),
+        file_type: image_path_parsed
+            .extension()
+            .and_then(|v| v.to_str())
+            .map(|v| v.to_string()),
+    };
+    let tag_names = match save_image(file.clone(), &state).await {
+        Ok(tag_names) => tag_names,
+        Err(SaveImageError::UnknownFormat) => todo!(),
+        Err(SaveImageError::Corrupt) => todo!(),
+    };
+    serde_json::to_string_pretty(&tag_names)
+        .unwrap()
+        .into_response()
 }
 
 #[utoipa::path(
