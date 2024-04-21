@@ -3,3 +3,7 @@ services:
     build: .
     ports:
       - 3000:3000
+    volumes:
+      - ./test.sqlite3:/app/data/database.sqlite3:rw
+      - ./deepdanbooru.onnx:/app/deepdanbooru.onnx
+      - ./gallery-dl/config.json:/etc/gallery-dl.conf

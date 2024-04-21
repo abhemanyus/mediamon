@@ -20,7 +20,7 @@ impl Database {
     pub async fn new() -> Result<Self> {
         let database_url = dotenv::var("DATABASE_URL")?;
         let pool = SqlitePoolOptions::new().connect(&database_url).await?;
-        // migrate!().run(&pool).await?;
+        migrate!().run(&pool).await?;
         Ok(Self { pool })
     }
 

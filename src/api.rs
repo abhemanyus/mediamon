@@ -26,6 +26,8 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::database::Database;
 use crate::deepbooru::Jarvis;
+use crate::gallerydl;
+use crate::ytdlp;
 
 pub fn router(jarvis: Jarvis, db: Database) -> Router {
     use tracing_subscriber::prelude::*;
@@ -53,7 +55,7 @@ pub fn router(jarvis: Jarvis, db: Database) -> Router {
         .allow_methods(tower_http::cors::Any)
         .allow_origin(tower_http::cors::Any);
     let app_state = AppState { jarvis, db };
-    
+
     Router::new()
         .route("/", routing::get(root))
         .route(
@@ -66,6 +68,11 @@ pub fn router(jarvis: Jarvis, db: Database) -> Router {
             routing::post(upload_video_file).layer(DefaultBodyLimit::disable()),
         )
         .route("/upload/video/url", routing::post(upload_video_url))
+        .route(
+            "/upload/music/file",
+            routing::post(upload_music_file).layer(DefaultBodyLimit::disable()),
+        )
+        .route("/upload/music/url", routing::post(upload_music_url))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(cors_layer)
         .layer(trace_layer)
@@ -87,9 +94,15 @@ struct AppState {
         (status = 400, description = "Failed to download file", body = String),
     )
 )]
-
 async fn upload_image_url(Json(body): Json<UploadUrlBody>) -> Response {
-    body.url.into_response()
+    let image_path = match gallerydl::download_art(&body.url).await {
+        Ok(image_path) => image_path,
+        Err(gallerydl::Error::GLD(err)) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, err).into_response()
+        }
+        Err(gallerydl::Error::IO(_)) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+    todo!();
 }
 
 #[utoipa::path(
@@ -101,8 +114,20 @@ async fn upload_image_url(Json(body): Json<UploadUrlBody>) -> Response {
         (status = 400, description = "Failed to download file", body = String),
     )
 )]
-
 async fn upload_video_url(Json(body): Json<UploadUrlBody>) -> Response {
+    body.url.into_response()
+}
+
+#[utoipa::path(
+    post,
+    path = "/upload/music/url",
+    request_body(content = UploadUrlBody),
+    responses(
+        (status = 201, description = "Downloaded file successfully", body = String),
+        (status = 400, description = "Failed to download file", body = String),
+    )
+)]
+async fn upload_music_url(Json(body): Json<UploadUrlBody>) -> Response {
     body.url.into_response()
 }
 
@@ -120,10 +145,23 @@ struct UploadUrlBody {
         (status = 400, description = "Failed to upload file", body = String),
     )
 )]
-
 async fn upload_image_file(State(state): State<Arc<AppState>>, multipart: Multipart) -> Response {
     info!("Uploading...");
     let file = extract_file("file", multipart).await.unwrap();
+    let tag_names = match save_image(file.clone(), &state).await {
+        Ok(tag_names) => tag_names,
+        Err(SaveImageError::UnknownFormat) => todo!(),
+        Err(SaveImageError::Corrupt) => todo!(),
+    };
+    serde_json::to_string_pretty(&tag_names)
+        .unwrap()
+        .into_response()
+}
+
+async fn save_image(
+    file: MultipartFile,
+    state: &AppState,
+) -> Result<Vec<(String, (f32, usize))>, SaveImageError> {
     let file_data = tokio::fs::read(&file.file_path).await.unwrap();
     let Some(image_format) = file
         .file_type
@@ -135,10 +173,10 @@ async fn upload_image_file(State(state): State<Arc<AppState>>, multipart: Multip
         .or_else(|| image::guess_format(&file_data).ok())
     else {
         tokio::fs::remove_file(file.file_path).await.ok();
-        return (StatusCode::BAD_REQUEST, "unknown image format").into_response();
+        return Err(SaveImageError::UnknownFormat);
     };
     let Ok(image_data) = image::load_from_memory_with_format(&file_data, image_format) else {
-        return (StatusCode::BAD_REQUEST, "corrupt image data").into_response();
+        return Err(SaveImageError::Corrupt);
     };
     let image_tags = state.jarvis.infer_tags(&image_data).unwrap();
     let tag_names: Vec<(String, (f32, usize))> = state
@@ -155,9 +193,12 @@ async fn upload_image_file(State(state): State<Arc<AppState>>, multipart: Multip
         .map(|(_, tag_name)| tag_name)
         .zip(image_tags)
         .collect();
-    serde_json::to_string_pretty(&tag_names)
-        .unwrap()
-        .into_response()
+    Ok(tag_names)
+}
+
+enum SaveImageError {
+    UnknownFormat,
+    Corrupt,
 }
 
 #[utoipa::path(
@@ -169,19 +210,35 @@ async fn upload_image_file(State(state): State<Arc<AppState>>, multipart: Multip
         (status = 400, description = "Failed to upload file", body = String),
     )
 )]
-
 async fn upload_video_file(multipart: Multipart) -> Response {
     info!("Uploading...");
     let file = extract_file("file", multipart).await.unwrap();
     file.file_path.into_response()
 }
 
+#[utoipa::path(
+    post,
+    path = "/upload/music/file",
+    request_body(content = UploadFileBody, content_type="multipart/form-data"),
+    responses(
+        (status = 201, description = "Uploaded file successfully", body = String),
+        (status = 400, description = "Failed to upload file", body = String),
+    )
+)]
+async fn upload_music_file(multipart: Multipart) -> Response {
+    info!("Uploading...");
+    let file = extract_file("file", multipart).await.unwrap();
+    file.file_path.into_response()
+}
+
+#[allow(dead_code)]
 #[derive(ToSchema)]
 struct UploadFileBody {
     #[schema(value_type = String, format = Binary)]
     file: Vec<u8>,
 }
 
+#[derive(Clone)]
 struct MultipartFile {
     file_path: String,
     file_name: Option<String>,

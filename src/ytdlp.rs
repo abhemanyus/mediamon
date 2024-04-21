@@ -10,7 +10,7 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub async fn download_music(url: &str, dir: &str) -> Result<String> {
+pub async fn download_music(url: &str) -> Result<String> {
     let mut command = tokio::process::Command::new(YT_DLP);
     command.args([
         "--format-sort",
@@ -23,7 +23,7 @@ pub async fn download_music(url: &str, dir: &str) -> Result<String> {
         "--embed-thumbnail",
         "--embed-metadata",
         "-o",
-        &format!("{}/%(title)s_%(id)s.%(ext)s", dir),
+        "/tmp/%(title)s_%(id)s.%(ext)s",
         "--print",
         "after_move:filepath",
         url,
@@ -41,7 +41,7 @@ pub async fn download_music(url: &str, dir: &str) -> Result<String> {
     }
 }
 
-pub async fn download_video(url: &str, dir: &str) -> Result<String> {
+pub async fn download_video(url: &str) -> Result<String> {
     let mut command = tokio::process::Command::new(YT_DLP);
     command.args([
         "--format-sort",
@@ -51,7 +51,7 @@ pub async fn download_video(url: &str, dir: &str) -> Result<String> {
         "--embed-thumbnail",
         "--embed-metadata",
         "-o",
-        &format!("{}/%(title)s_%(id)s.%(ext)s", dir),
+        "/tmp/%(title)s_%(id)s.%(ext)s",
         "--print",
         "after_move:filepath",
         url,
@@ -71,7 +71,14 @@ pub async fn download_video(url: &str, dir: &str) -> Result<String> {
 
 #[tokio::test]
 async fn test_download_music() {
-    download_music("https://www.youtube.com/watch?v=VFbhKZFzbzk", "./music")
+    download_music("https://www.youtube.com/watch?v=VFbhKZFzbzk")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn test_download_video() {
+    download_video("https://www.youtube.com/watch?v=VFbhKZFzbzk")
         .await
         .unwrap();
 }

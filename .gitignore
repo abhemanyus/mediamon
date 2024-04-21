@@ -1,10 +1,6 @@
 /target
-/music
-/video
 *.sqlite
 *.sqlite3
 *.sqlite3-*
 *.env
-onnx-modifier
-yt-dlp
-gallery-dl
+config.json

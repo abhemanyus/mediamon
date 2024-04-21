@@ -1,0 +1,27 @@
+{
+  "extractor": {
+    "base-directory": "/tmp",
+    "parent-directory": true,
+    "directory": [
+      ""
+    ],
+    "pixiv": {
+      "username": "aaronthebladesmith@gmail.com",
+      "password": "weirwoodshave00"
+    },
+    "twitter": {
+      "username": "weirwoods00",
+      "password": "weirwoodshave00"
+    },
+    "deviantart": {
+      "username": "BL4D35M1TH",
+      "password": "sanndymanndyalookalendi"
+    }
+  },
+  "downloader": {},
+  "output": {
+    "mode": "pipe",
+    "success": "{}"
+  },
+  "postprocessor": {}
+}
