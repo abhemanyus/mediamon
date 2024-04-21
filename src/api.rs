@@ -1,7 +1,7 @@
 use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
 use axum::Json;
-use image::ImageBuffer;
+use log::debug;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
@@ -28,7 +28,6 @@ use utoipa_swagger_ui::SwaggerUi;
 use crate::database::Database;
 use crate::deepbooru::Jarvis;
 use crate::gallerydl;
-use crate::ytdlp;
 
 pub fn router(jarvis: Jarvis, db: Database) -> Router {
     use tracing_subscriber::prelude::*;
@@ -106,6 +105,7 @@ async fn upload_image_url(
         }
         Err(gallerydl::Error::IO(_)) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
+    debug!("image_path: {}", image_path);
     let image_path_parsed = std::path::Path::new(&image_path);
     let file = MultipartFile {
         file_path: image_path.clone(),

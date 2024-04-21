@@ -1,6 +1,8 @@
 services:
   mediamon:
     build: .
+    environment:
+      - RUST_LOG=debug
     ports:
       - 3000:3000
     volumes:

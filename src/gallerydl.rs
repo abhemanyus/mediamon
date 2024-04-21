@@ -12,7 +12,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub async fn download_art(url: &str) -> Result<String> {
     let mut command = tokio::process::Command::new(GALLERY_DL);
-    command.arg(url);
+    command.args(["-D", "/tmp", "-f", "{id}_{_now!T}.{extension}", url]);
     let output = match command.output().await {
         Ok(output) => output,
         Err(err) => return Err(Error::IO(err)),
