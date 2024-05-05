@@ -1,4 +1,5 @@
 use axum::extract::DefaultBodyLimit;
+use axum::extract::Path;
 use axum::extract::State;
 use axum::Json;
 use log::debug;
@@ -73,6 +74,7 @@ pub fn router(jarvis: Jarvis, db: Database) -> Router {
             routing::post(upload_music_file).layer(DefaultBodyLimit::disable()),
         )
         .route("/upload/music/url", routing::post(upload_music_url))
+        .route("/thumbnail/image/:id", routing::get(image_thumbnail))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(cors_layer)
         .layer(trace_layer)
@@ -176,8 +178,15 @@ async fn upload_image_file(State(state): State<Arc<AppState>>, multipart: Multip
         Err(SaveImageError::UnknownFormat) => todo!(),
         Err(SaveImageError::Corrupt) => todo!(),
     };
-    serde_json::to_string_pretty(&tag_names)
-        .unwrap()
+    let img = state
+        .db
+        .save_image(&file.file_path, "somerandomhash", 239823)
+        .await
+        .unwrap();
+    (
+        StatusCode::CREATED,
+        serde_json::to_string_pretty(&img).unwrap(),
+    )
         .into_response()
 }
 
@@ -303,6 +312,21 @@ async fn extract_file(field_name: &str, mut multipart: Multipart) -> Result<Mult
 
 #[utoipa::path(
     get,
+    path = "/thumbnail/image/{id}",
+    params(
+        ("id" = i64, Path, description = "Image id"),
+    ),
+    responses(
+        (status = 200, description = "Thumbnail found or generated", body = Vec<u8>),
+        (status = 404, description = "Thumbnail not found", body = String),
+    )
+)]
+async fn image_thumbnail(Path(id): Path<i64>) -> Response {
+    id.to_string().into_response()
+}
+
+#[utoipa::path(
+    get,
     path = "/",
     responses(
         (status = 200, description = "List all todos successfully", body = String),
@@ -331,6 +355,9 @@ async fn root() -> Response {
         upload_image_url,
         upload_video_file,
         upload_video_url,
+        upload_music_file,
+        upload_music_url,
+        image_thumbnail,
     ),
     components(schemas(UploadFileBody, UploadUrlBody)),
     modifiers(&SecurityAddon),

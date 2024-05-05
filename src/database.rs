@@ -1,8 +1,43 @@
-use sqlx::{migrate, sqlite::SqlitePoolOptions, QueryBuilder, Sqlite, SqlitePool};
+use chrono::NaiveDateTime;
+use serde::Serialize;
+use sqlx::{migrate, sqlite::SqlitePoolOptions, FromRow, QueryBuilder, Sqlite, SqlitePool};
 
 #[derive(Clone)]
 pub struct Database {
     pool: SqlitePool,
+}
+
+#[derive(FromRow, Serialize, Debug, Clone)]
+pub struct ImageRow {
+    date_added: NaiveDateTime,
+    date_updated: NaiveDateTime,
+    hash: String,
+    img_id: i64,
+    path: String,
+    size: i64,
+}
+
+#[derive(FromRow, Serialize, Debug, Clone)]
+pub struct TagRow {
+    name: String,
+    tag_id: i64,
+}
+
+#[derive(FromRow, Serialize, Debug, Clone)]
+pub struct ImageTagRow {
+    image_id: i64,
+    score: f64,
+    tag_id: i64,
+}
+
+#[derive(FromRow, Serialize, Debug, Clone)]
+pub struct VideoRow {
+    date_added: NaiveDateTime,
+    date_updated: NaiveDateTime,
+    hash: String,
+    path: String,
+    size: i64,
+    video_id: i64,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -22,6 +57,25 @@ impl Database {
         let pool = SqlitePoolOptions::new().connect(&database_url).await?;
         migrate!().run(&pool).await?;
         Ok(Self { pool })
+    }
+
+    pub async fn save_image(&self, path: &str, hash: &str, size: i64) -> Result<ImageRow> {
+        let img = sqlx::query_as!(
+            ImageRow,
+            r#"
+                INSERT INTO image
+                (path, hash, size)
+                VALUES
+                (?1, ?2, ?3)
+                RETURNING *
+            "#,
+            path,
+            hash,
+            size
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(img)
     }
 
     pub async fn get_tag_names(&self, tag_ids: &[i32]) -> Result<Vec<(i32, String)>> {
